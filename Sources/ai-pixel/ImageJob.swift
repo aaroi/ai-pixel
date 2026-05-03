@@ -1,0 +1,135 @@
+import Foundation
+import AppKit
+import SwiftUI
+
+@MainActor
+final class ImageJob: ObservableObject, Identifiable {
+    let id = UUID()
+    let sourceURL: URL
+    let sourceName: String
+    let sourceStem: String
+    let sourceBytes: Int
+    let sourceWidth: Int
+    let sourceHeight: Int
+    let sourceThumbnail: NSImage?
+
+    /// Editable filename stem (without extension). Initialized from the global
+    /// suffix at import time; the user can rewrite it per-row before saving.
+    /// Once the user has typed in the field, `isCustomStem` flips to true and
+    /// global suffix changes will no longer overwrite this value.
+    @Published var outputStem: String
+    @Published var isCustomStem: Bool = false
+
+    enum State {
+        case processing
+        case ready(processed: ProcessedImage)
+        case saved(at: URL, processed: ProcessedImage)
+        case failed(message: String)
+    }
+
+    @Published var state: State = .processing
+
+    init?(sourceURL: URL) {
+        let attrs = (try? FileManager.default.attributesOfItem(atPath: sourceURL.path)) ?? [:]
+        let bytes = (attrs[.size] as? NSNumber)?.intValue ?? 0
+        guard let dims = ImageProcessor.sourceDimensions(url: sourceURL) else {
+            return nil
+        }
+        let stem = sourceURL.deletingPathExtension().lastPathComponent
+        let suffix = UserDefaults.standard.outputSuffix
+        self.sourceURL = sourceURL
+        self.sourceName = sourceURL.lastPathComponent
+        self.sourceStem = stem
+        self.sourceBytes = bytes
+        self.sourceWidth = dims.0
+        self.sourceHeight = dims.1
+        self.sourceThumbnail = ImageProcessor.sourceThumbnail(url: sourceURL)
+        self.outputStem = "\(stem)\(suffix)"
+    }
+
+    func run() async {
+        let url = sourceURL
+        let format = UserDefaults.standard.outputFormat
+        let quality = UserDefaults.standard.outputQuality
+        // First run shows a spinner. Re-runs (triggered by quality / format
+        // changes) keep the current ready/saved data visible so the row
+        // doesn't flash a spinner on every slider tick.
+        let isFirstRun: Bool = {
+            switch state {
+            case .ready, .saved: return false
+            default: return true
+            }
+        }()
+        if isFirstRun { self.state = .processing }
+        do {
+            let processed = try await Task.detached(priority: .userInitiated) {
+                try ImageProcessor.process(url: url, format: format, quality: quality)
+            }.value
+            self.state = .ready(processed: processed)
+        } catch {
+            self.state = .failed(message: error.localizedDescription)
+        }
+    }
+
+    func save() {
+        guard case .ready(let processed) = state else { return }
+        let dir = sourceURL.deletingLastPathComponent()
+        let rawStem = outputStem.isEmpty ? "\(sourceStem)\(UserDefaults.standard.outputSuffix)" : outputStem
+        // Strip path separators and parent-directory tokens so the output stays
+        // alongside the source file even if the user types something unusual.
+        let stem = rawStem
+            .replacingOccurrences(of: "/", with: "_")
+            .replacingOccurrences(of: "\\", with: "_")
+            .replacingOccurrences(of: "..", with: "_")
+        let dest = dir.appendingPathComponent("\(stem).\(processed.format.fileExtension)")
+        do {
+            try processed.data.write(to: dest, options: .atomic)
+            self.state = .saved(at: dest, processed: processed)
+        } catch {
+            self.state = .failed(message: "save failed: \(error.localizedDescription)")
+        }
+    }
+
+    var outputBytes: Int? {
+        switch state {
+        case .ready(let p), .saved(_, let p): return p.data.count
+        default: return nil
+        }
+    }
+
+    /// Bytes saved vs source. Nil while processing.
+    var bytesSaved: Int? {
+        guard let out = outputBytes, sourceBytes > 0 else { return nil }
+        return max(0, sourceBytes - out)
+    }
+
+    /// Percent reduction (0–100). Nil while processing.
+    var percentSaved: Int? {
+        guard let saved = bytesSaved, sourceBytes > 0 else { return nil }
+        return Int(round(Double(saved) / Double(sourceBytes) * 100))
+    }
+
+    var outputDimensions: (Int, Int)? {
+        switch state {
+        case .ready(let p), .saved(_, let p): return (p.width, p.height)
+        default: return nil
+        }
+    }
+
+    var outputThumbnail: NSImage? {
+        switch state {
+        case .ready(let p), .saved(_, let p): return p.thumbnail
+        default: return nil
+        }
+    }
+}
+
+enum ByteFormat {
+    static func short(_ bytes: Int) -> String {
+        let f = ByteCountFormatter()
+        f.allowedUnits = [.useMB, .useKB]
+        f.countStyle = .file
+        f.zeroPadsFractionDigits = false
+        return f.string(fromByteCount: Int64(bytes))
+    }
+}
