@@ -20,6 +20,11 @@ final class ImageJob: ObservableObject, Identifiable {
     @Published var outputStem: String
     @Published var isCustomStem: Bool = false
 
+    /// The suffix currently embedded at the end of `outputStem`. Tracked so
+    /// that when the user changes the global suffix, we can strip the old one
+    /// before appending the new one (instead of stacking them).
+    var lastAppliedSuffix: String
+
     enum State {
         case processing
         case ready(processed: ProcessedImage)
@@ -44,7 +49,15 @@ final class ImageJob: ObservableObject, Identifiable {
         self.sourceWidth = dims.0
         self.sourceHeight = dims.1
         self.sourceThumbnail = ImageProcessor.sourceThumbnail(url: sourceURL)
-        self.outputStem = "\(stem)\(suffix)"
+        // If the source filename already ends with the current global suffix
+        // (re-import of a previously saved output), treat the suffix as already
+        // applied so we don't stack it.
+        if !suffix.isEmpty && stem.hasSuffix(suffix) {
+            self.outputStem = stem
+        } else {
+            self.outputStem = "\(stem)\(suffix)"
+        }
+        self.lastAppliedSuffix = suffix
     }
 
     func run() async {

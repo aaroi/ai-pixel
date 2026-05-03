@@ -264,11 +264,19 @@ final class JobsModel: ObservableObject {
     }
 
     /// Apply the current global suffix to every job whose filename hasn't been
-    /// manually edited. Called when the user changes the suffix in settings.
+    /// manually edited. The previously-applied suffix is stripped from the end
+    /// of the stem before the new one is appended, so changing the suffix
+    /// replaces it instead of stacking.
     func applyGlobalSuffix() {
-        let suffix = UserDefaults.standard.outputSuffix
+        let newSuffix = UserDefaults.standard.outputSuffix
         for job in list where !job.isCustomStem {
-            job.outputStem = "\(job.sourceStem)\(suffix)"
+            var stem = job.outputStem
+            let last = job.lastAppliedSuffix
+            if !last.isEmpty && stem.hasSuffix(last) {
+                stem = String(stem.dropLast(last.count))
+            }
+            job.outputStem = stem + newSuffix
+            job.lastAppliedSuffix = newSuffix
         }
     }
 
