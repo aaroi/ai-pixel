@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="assets/icon.png" width="160" alt="ai.pixel icon" />
+</p>
+
 # ai.pixel
 
 **The minimalistic image compression tool for macOS.**
