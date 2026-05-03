@@ -265,7 +265,7 @@ struct ContentView: View {
                     .padding(.vertical, 6)
                     .overlay(
                         Rectangle()
-                            .strokeBorder(jobs.canSave ? Palette.borderStrong(scheme) : Palette.border(scheme), lineWidth: 1)
+                            .strokeBorder(Palette.border(scheme), lineWidth: 1)
                     )
             }
             .buttonStyle(.plain)
@@ -564,7 +564,7 @@ struct JobRow: View {
                         .font(Typography.systemSmall)
                         .padding(.horizontal, 12)
                         .padding(.vertical, 6)
-                        .overlay(Rectangle().strokeBorder(Palette.borderStrong(scheme), lineWidth: 1))
+                        .overlay(Rectangle().strokeBorder(Palette.border(scheme), lineWidth: 1))
                         .foregroundColor(Palette.fg(scheme))
                 }
                 .buttonStyle(.plain)
