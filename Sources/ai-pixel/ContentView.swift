@@ -67,7 +67,7 @@ struct ContentView: View {
              + Text(" to open · resized to ").font(Typography.systemTiny)
              + Text("1920px").font(Typography.monoTiny)
              + Text(" · saved as ").font(Typography.systemTiny)
-             + Text("<name>\(effectiveSuffix).\(format.fileExtension)").font(Typography.monoTiny))
+             + Text("<name>\(suffix).\(format.fileExtension)").font(Typography.monoTiny))
                 .foregroundColor(Palette.fgMuted(scheme))
             Spacer()
         }
@@ -214,10 +214,6 @@ struct ContentView: View {
                 Task { @MainActor in jobs.add(url: url) }
             }
         }
-    }
-
-    private var effectiveSuffix: String {
-        suffix.isEmpty ? SettingsKeys.defaultSuffix : suffix
     }
 
     private func openPanel() {

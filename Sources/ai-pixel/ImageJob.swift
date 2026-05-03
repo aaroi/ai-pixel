@@ -87,7 +87,9 @@ final class ImageJob: ObservableObject, Identifiable {
     func save() {
         guard case .ready(let processed) = state else { return }
         let dir = sourceURL.deletingLastPathComponent()
-        let rawStem = outputStem.isEmpty ? "\(sourceStem)\(UserDefaults.standard.outputSuffix)" : outputStem
+        // If the user cleared the filename field, fall back to the source stem
+        // (no suffix) — empty input means "save as-is".
+        let rawStem = outputStem.isEmpty ? sourceStem : outputStem
         // Strip path separators and parent-directory tokens so the output stays
         // alongside the source file even if the user types something unusual.
         let stem = rawStem

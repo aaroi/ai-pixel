@@ -9,7 +9,7 @@ enum SettingsKeys {
     static let outputFormat  = "outputFormat"
     static let outputQuality = "outputQuality"
 
-    static let defaultSuffix:  String = "-linkedin"
+    static let defaultSuffix:  String = "-compressed"
     static let defaultFormat:  String = OutputFormat.jpeg.rawValue
     static let defaultQuality: Double = 0.95
 }
@@ -60,9 +60,11 @@ enum OutputFormat: String, CaseIterable, Identifiable {
 }
 
 extension UserDefaults {
+    /// Returns the user's chosen suffix verbatim, including empty string if
+    /// they've cleared the field. Falls back to the first-launch default only
+    /// when the key has never been set.
     var outputSuffix: String {
-        let s = string(forKey: SettingsKeys.outputSuffix) ?? SettingsKeys.defaultSuffix
-        return s.isEmpty ? SettingsKeys.defaultSuffix : s
+        string(forKey: SettingsKeys.outputSuffix) ?? SettingsKeys.defaultSuffix
     }
 
     var outputFormat: OutputFormat {
