@@ -30,11 +30,11 @@ enum ProcessingError: Error, LocalizedError {
 
 enum ImageProcessor {
 
-    /// Long-edge target for LinkedIn — large enough to look good on retina,
-    /// small enough that LinkedIn won't aggressively recompress.
-    static let longEdge: CGFloat = 1920
+    /// Default long-edge target in pixels; can be overridden per-call.
+    /// `maxEdge = 0` means "don't resize, just re-encode at original size".
+    static let defaultLongEdge: Int = 1920
 
-    static func process(url: URL, format: OutputFormat, quality: Double) throws -> ProcessedImage {
+    static func process(url: URL, format: OutputFormat, quality: Double, maxEdge: Int) throws -> ProcessedImage {
         guard let src = CGImageSourceCreateWithURL(url as CFURL, nil) else {
             throw ProcessingError.unreadable
         }
@@ -44,7 +44,13 @@ enum ImageProcessor {
 
         let w = CGFloat(cg.width)
         let h = CGFloat(cg.height)
-        let scale = min(longEdge / max(w, h), 1.0)
+        // maxEdge ≤ 0 means "no resize" — keep the original dimensions.
+        let scale: CGFloat
+        if maxEdge > 0 {
+            scale = min(CGFloat(maxEdge) / max(w, h), 1.0)
+        } else {
+            scale = 1.0
+        }
         let outW = Int((w * scale).rounded())
         let outH = Int((h * scale).rounded())
 

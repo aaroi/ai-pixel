@@ -3,29 +3,63 @@ import SwiftUI
 // Grayscale palette lifted in spirit from ai.md.
 // Light and dark variants resolve via @Environment(\.colorScheme).
 
-// Pure grayscale, no harsh contrasts. fg is intentionally not pure white in dark
-// mode — it's softened to ~80% so buttons and outlines don't glare.
+/// Palette mapped onto Tailwind CSS's `gray-*` scale (the cool-tinted one,
+/// not `neutral-*`). Hex values pulled directly from Tailwind v3 defaults so
+/// these tokens render the same as a `bg-gray-900 text-gray-300` page would
+/// in a Tailwind site. Success uses `emerald-*`.
+///
+/// Reference: https://tailwindcss.com/docs/customizing-colors
 enum Palette {
+    // MARK: Tailwind gray-* hex values
+
+    private enum Gray {
+        static let _50:  UInt32 = 0xF9FAFB
+        static let _100: UInt32 = 0xF3F4F6
+        static let _200: UInt32 = 0xE5E7EB
+        static let _300: UInt32 = 0xD1D5DB
+        static let _400: UInt32 = 0x9CA3AF
+        static let _500: UInt32 = 0x6B7280
+        static let _600: UInt32 = 0x4B5563
+        static let _700: UInt32 = 0x374151
+        static let _800: UInt32 = 0x1F2937
+        static let _900: UInt32 = 0x111827
+        static let _950: UInt32 = 0x030712
+    }
+
+    private enum Emerald {
+        static let _400: UInt32 = 0x34D399
+        static let _600: UInt32 = 0x059669
+    }
+
+    // MARK: Semantic tokens (light / dark)
+
+    /// Window background. light: gray-50 · dark: gray-900
     static func bg(_ scheme: ColorScheme) -> Color {
-        scheme == .dark ? Color(hex: 0x121212) : Color(hex: 0xFAFAFA)
+        Color(hex: scheme == .dark ? Gray._900 : Gray._50)
     }
+    /// Primary foreground. light: gray-800 · dark: gray-300
     static func fg(_ scheme: ColorScheme) -> Color {
-        scheme == .dark ? Color(hex: 0xCBCBCB) : Color(hex: 0x2D2D2D)
+        Color(hex: scheme == .dark ? Gray._300 : Gray._800)
     }
+    /// Muted/secondary foreground. light + dark: gray-500
     static func fgMuted(_ scheme: ColorScheme) -> Color {
-        scheme == .dark ? Color(hex: 0x8B8B8B) : Color(hex: 0x7A7A7A)
+        Color(hex: Gray._500)
     }
+    /// Subtle borders / dividers. light: gray-200 · dark: gray-800
     static func border(_ scheme: ColorScheme) -> Color {
-        scheme == .dark ? Color(hex: 0x2A2A2A) : Color(hex: 0xE5E5E5)
+        Color(hex: scheme == .dark ? Gray._800 : Gray._200)
     }
+    /// Stronger borders (e.g. active button outlines). light: gray-400 · dark: gray-700
     static func borderStrong(_ scheme: ColorScheme) -> Color {
-        scheme == .dark ? Color(hex: 0x4A4A4A) : Color(hex: 0xB5B5B5)
+        Color(hex: scheme == .dark ? Gray._700 : Gray._400)
     }
+    /// Selected-segment fill. Subtle tint of fg.
     static func selection(_ scheme: ColorScheme) -> Color {
-        scheme == .dark ? Color.white.opacity(0.10) : Color.black.opacity(0.08)
+        scheme == .dark ? Color.white.opacity(0.08) : Color.black.opacity(0.06)
     }
+    /// Savings indicator. light: emerald-600 · dark: emerald-400
     static func success(_ scheme: ColorScheme) -> Color {
-        scheme == .dark ? Color(hex: 0x6BB87E) : Color(hex: 0x3F8C57)
+        Color(hex: scheme == .dark ? Emerald._400 : Emerald._600)
     }
 }
 

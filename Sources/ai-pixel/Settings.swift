@@ -8,10 +8,16 @@ enum SettingsKeys {
     static let outputSuffix  = "outputSuffix"
     static let outputFormat  = "outputFormat"
     static let outputQuality = "outputQuality"
+    static let outputMaxEdge     = "outputMaxEdge"
+    static let outputMaxEdgeMode = "outputMaxEdgeMode"
 
     static let defaultSuffix:  String = "-compressed"
     static let defaultFormat:  String = OutputFormat.jpeg.rawValue
     static let defaultQuality: Double = 0.95
+    /// Long-edge target in pixels. `0` means don't resize — just re-encode.
+    static let defaultMaxEdge: Int    = 1920
+    /// "preset" or "custom". Custom mode shows the numeric input.
+    static let defaultMaxEdgeMode: String = "preset"
 }
 
 enum OutputFormat: String, CaseIterable, Identifiable {
@@ -76,5 +82,13 @@ extension UserDefaults {
         let v = double(forKey: SettingsKeys.outputQuality)
         // double(forKey:) returns 0 if unset — fall back to default in that case.
         return v == 0 ? SettingsKeys.defaultQuality : v
+    }
+
+    /// Long-edge target in pixels. `0` means don't resize.
+    var outputMaxEdge: Int {
+        if object(forKey: SettingsKeys.outputMaxEdge) == nil {
+            return SettingsKeys.defaultMaxEdge
+        }
+        return integer(forKey: SettingsKeys.outputMaxEdge)
     }
 }

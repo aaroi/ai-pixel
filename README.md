@@ -64,6 +64,7 @@ ai-pixel --json one.png two.png                         # one JSON object per li
 |---|---|---|
 | `--format <jpeg\|png\|webp>` | `jpeg` | WebP requires `brew install webp` |
 | `--quality <0-100\|0-1>` | `95` | Ignored for PNG (lossless) |
+| `--max-edge <px>` | `1920` | Resize so the long edge is N pixels. `0` = don't resize |
 | `--suffix <str>` | `-compressed` | Appended to source basename |
 | `--output-dir <path>` | source dir | Created if missing |
 | `--json` | off | Emit one JSON object per file (machine-readable) |

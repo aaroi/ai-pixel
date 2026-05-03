@@ -22,6 +22,7 @@ enum CLI {
         var format: OutputFormat = .jpeg
         var quality: Double = 0.95
         var suffix: String = "-compressed"
+        var maxEdge: Int = SettingsKeys.defaultMaxEdge
         var outputDir: URL? = nil
         var emitJSON = false
         var inputs: [URL] = []
@@ -55,6 +56,13 @@ enum CLI {
                     return 2
                 }
                 suffix = args[i]
+            case "--max-edge":
+                i += 1
+                guard i < args.count, let n = Int(args[i]), n >= 0 else {
+                    fputs("error: --max-edge requires a non-negative integer (0 = no resize)\n", stderr)
+                    return 2
+                }
+                maxEdge = n
             case "--output-dir":
                 i += 1
                 guard i < args.count else {
@@ -86,6 +94,7 @@ enum CLI {
                 input: input,
                 format: format,
                 quality: quality,
+                maxEdge: maxEdge,
                 suffix: suffix,
                 outputDir: outputDir
             )
@@ -102,6 +111,7 @@ enum CLI {
         input: URL,
         format: OutputFormat,
         quality: Double,
+        maxEdge: Int,
         suffix: String,
         outputDir: URL?
     ) -> Summary {
@@ -115,7 +125,7 @@ enum CLI {
         }
 
         do {
-            let processed = try ImageProcessor.process(url: input, format: format, quality: quality)
+            let processed = try ImageProcessor.process(url: input, format: format, quality: quality, maxEdge: maxEdge)
             try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
             try processed.data.write(to: dest, options: .atomic)
             return Summary(
@@ -195,19 +205,22 @@ enum CLI {
         options:
           --format <jpeg|png|webp>   output format (default: jpeg)
           --quality <0-100|0-1>      quality for lossy formats (default: 95)
+          --max-edge <px>            resize so the long edge is this many px;
+                                     0 = don't resize (default: 1920)
           --suffix <str>             filename suffix (default: -compressed)
           --output-dir <path>        write outputs here (default: alongside source)
           --json                     emit results as JSON lines (one per file)
           --help, -h                 show this help
 
         notes:
-          - images are resized so the long edge is 1920px (preserves aspect ratio).
+          - aspect ratio is preserved when resizing.
           - webp requires `brew install webp` (macOS doesn't ship a webp encoder).
           - exit codes: 0 ok, 1 some files failed, 2 bad arguments.
 
         examples:
           ai-pixel poster.png
-          ai-pixel --format webp --quality 85 *.png
+          ai-pixel --max-edge 1080 --format webp --quality 85 *.png
+          ai-pixel --max-edge 0 --quality 80 photo.jpg     # compress, don't resize
           ai-pixel --suffix -li --output-dir ~/Desktop a.png b.jpg
           ai-pixel --json one.png two.png
         """)

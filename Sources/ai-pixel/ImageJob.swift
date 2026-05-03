@@ -64,6 +64,7 @@ final class ImageJob: ObservableObject, Identifiable {
         let url = sourceURL
         let format = UserDefaults.standard.outputFormat
         let quality = UserDefaults.standard.outputQuality
+        let maxEdge = UserDefaults.standard.outputMaxEdge
         // First run shows a spinner. Re-runs (triggered by quality / format
         // changes) keep the current ready/saved data visible so the row
         // doesn't flash a spinner on every slider tick.
@@ -76,7 +77,7 @@ final class ImageJob: ObservableObject, Identifiable {
         if isFirstRun { self.state = .processing }
         do {
             let processed = try await Task.detached(priority: .userInitiated) {
-                try ImageProcessor.process(url: url, format: format, quality: quality)
+                try ImageProcessor.process(url: url, format: format, quality: quality, maxEdge: maxEdge)
             }.value
             self.state = .ready(processed: processed)
         } catch {

@@ -4,7 +4,7 @@ struct AiPixelApp: App {
     var body: some Scene {
         WindowGroup {
             ContentView()
-                .frame(minWidth: 880, minHeight: 360)
+                .frame(minWidth: 940, minHeight: 360)
         }
         .windowStyle(.hiddenTitleBar)
         .windowResizability(.contentSize)

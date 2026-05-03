@@ -10,14 +10,20 @@ struct ContentView: View {
     @AppStorage(SettingsKeys.outputSuffix)  private var suffix: String  = SettingsKeys.defaultSuffix
     @AppStorage(SettingsKeys.outputFormat)  private var formatRaw: String = SettingsKeys.defaultFormat
     @AppStorage(SettingsKeys.outputQuality) private var quality: Double = SettingsKeys.defaultQuality
+    @AppStorage(SettingsKeys.outputMaxEdge)     private var maxEdge: Int        = SettingsKeys.defaultMaxEdge
+    @AppStorage(SettingsKeys.outputMaxEdgeMode) private var maxEdgeMode: String = SettingsKeys.defaultMaxEdgeMode
 
     var body: some View {
         ZStack(alignment: .top) {
             Palette.bg(scheme).ignoresSafeArea()
 
             VStack(spacing: 0) {
+                // Reserve space for the title-bar / traffic-light zone so the
+                // settings bar below can use the same leading padding (16) as
+                // the rows and footer — everything left-aligns to the same edge.
+                Color.clear.frame(height: 22)
                 settingsBar
-                Divider().background(Palette.border(scheme))
+                Hairline()
 
                 if jobs.list.isEmpty {
                     emptyState
@@ -26,7 +32,7 @@ struct ContentView: View {
                 }
 
                 if !jobs.list.isEmpty {
-                    Divider().background(Palette.border(scheme))
+                    Hairline()
                     footer
                 }
             }
@@ -47,12 +53,54 @@ struct ContentView: View {
         .onReceive(NotificationCenter.default.publisher(for: .saveAllRequested)) { _ in jobs.saveAll() }
         .onChange(of: formatRaw) { _ in jobs.reprocessAll() }
         .onChange(of: quality)   { _ in jobs.reprocessAll() }
+        .onChange(of: maxEdge)   { _ in jobs.reprocessAll() }
         .onChange(of: suffix)    { _ in jobs.applyGlobalSuffix() }
     }
 
     private var format: OutputFormat {
         OutputFormat(rawValue: formatRaw) ?? .jpeg
     }
+
+    /// Bridge between the dropdown's String selection and the Int-typed
+    /// `maxEdge` + the mode flag. Picking a preset sets mode = "preset" and
+    /// `maxEdge` to the matching int. Picking "Custom" flips mode = "custom"
+    /// without changing `maxEdge` (so the numeric field starts from the
+    /// currently-effective value).
+    private var maxEdgeSelection: Binding<String> {
+        Binding(
+            get: { maxEdgeMode == "custom" ? "custom" : String(maxEdge) },
+            set: { newValue in
+                if newValue == "custom" {
+                    maxEdgeMode = "custom"
+                } else {
+                    maxEdgeMode = "preset"
+                    if let n = Int(newValue) { maxEdge = n }
+                }
+            }
+        )
+    }
+
+    /// What the resize dropdown shows when closed.
+    private var maxEdgeDisplayLabel: String {
+        if maxEdgeMode == "custom" {
+            return maxEdge > 0 ? "\(maxEdge) px" : "Custom"
+        }
+        switch maxEdge {
+        case 0:    return "Off"
+        case 1080: return "1080 px"
+        case 1920: return "1920 px"
+        default:   return "\(maxEdge) px"
+        }
+    }
+
+    private static let intFormatter: NumberFormatter = {
+        let f = NumberFormatter()
+        f.numberStyle = .none
+        f.minimum = 0
+        f.maximum = 10000
+        f.allowsFloats = false
+        return f
+    }()
 
     // MARK: - Sections
 
@@ -89,14 +137,48 @@ struct ContentView: View {
                     .textFieldStyle(.plain)
                     .font(Typography.monoSmall)
                     .foregroundColor(Palette.fg(scheme))
-                    .frame(width: 110)
                     .padding(.horizontal, 6)
-                    .padding(.vertical, 3)
+                    .frame(width: 110, height: 24)
                     .overlay(Rectangle().strokeBorder(Palette.border(scheme), lineWidth: 1))
             }
 
-            // Format — segmented control alone, no label (the formats label themselves)
-            GraySegmented(selection: $formatRaw, options: OutputFormat.available.map { ($0.rawValue, $0.label) })
+            // Format — grayscale dropdown
+            GrayDropdown(
+                selection: $formatRaw,
+                options: OutputFormat.available.map { ($0.rawValue, $0.label) },
+                width: 78
+            )
+
+            // Resize — dropdown for presets / Custom. Numeric input only
+            // appears when Custom is selected.
+            HStack(spacing: 6) {
+                GrayDropdown(
+                    selection: maxEdgeSelection,
+                    options: [
+                        ("1080",   "1080 px"),
+                        ("1920",   "1920 px"),
+                        ("0",      "Off"),
+                        ("custom", "Custom…")
+                    ],
+                    displayLabel: maxEdgeDisplayLabel,
+                    width: 92
+                )
+                if maxEdgeMode == "custom" {
+                    HStack(spacing: 4) {
+                        TextField("", value: $maxEdge, formatter: Self.intFormatter)
+                            .textFieldStyle(.plain)
+                            .font(Typography.monoSmall)
+                            .foregroundColor(Palette.fg(scheme))
+                            .multilineTextAlignment(.trailing)
+                            .padding(.horizontal, 6)
+                            .frame(width: 56, height: 24)
+                            .overlay(Rectangle().strokeBorder(Palette.border(scheme), lineWidth: 1))
+                        Text("px")
+                            .font(Typography.systemTiny)
+                            .foregroundColor(Palette.fgMuted(scheme))
+                    }
+                }
+            }
 
             // Quality (lossy only)
             if format.isLossy {
@@ -129,8 +211,7 @@ struct ContentView: View {
                 .cursorPointer()
             }
         }
-        .padding(.leading, 80)   // clear the traffic-light zone
-        .padding(.trailing, 16)
+        .padding(.horizontal, 16)
         .frame(height: 38)
         .background(Palette.bg(scheme))
     }
@@ -165,7 +246,7 @@ struct ContentView: View {
                 ForEach(jobs.list) { job in
                     JobRow(job: job)
                         .environmentObject(jobs)
-                    Divider().background(Palette.border(scheme))
+                    Hairline()
                 }
             }
         }
@@ -505,6 +586,6 @@ struct JobRow: View {
                 Color.clear
             }
         }
-        .frame(width: 90, alignment: .center)
+        .frame(width: 90, alignment: .trailing)
     }
 }

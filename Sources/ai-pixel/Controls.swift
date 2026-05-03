@@ -1,5 +1,16 @@
 import SwiftUI
 
+/// 1pt horizontal rule in the palette's border color. Replaces SwiftUI's
+/// `Divider`, which uses the system separator (darker than our gray-200).
+struct Hairline: View {
+    @Environment(\.colorScheme) private var scheme
+    var body: some View {
+        Rectangle()
+            .fill(Palette.border(scheme))
+            .frame(height: 1)
+    }
+}
+
 /// Minimal grayscale segmented control. The system Picker(.segmented) uses the
 /// accent color for the selected pill — that doesn't match our palette, so this
 /// reimplementation does it in pure grayscale.
@@ -10,9 +21,8 @@ struct GraySegmented: View {
     @Environment(\.colorScheme) private var scheme
     @Binding var selection: String
     let options: [(value: String, label: String)]
-
-    private let segmentWidth: CGFloat = 64
-    private let segmentHeight: CGFloat = 24
+    var segmentWidth: CGFloat = 56
+    var segmentHeight: CGFloat = 24
 
     var body: some View {
         HStack(spacing: 0) {
@@ -40,6 +50,58 @@ struct GraySegmented: View {
             }
         }
         .overlay(Rectangle().strokeBorder(Palette.border(scheme), lineWidth: 1))
+    }
+}
+
+/// Minimal grayscale dropdown. Wraps `Menu` with a custom flat-bordered label
+/// so it visually matches the TextField next to it. The label always shows
+/// the current selection's label (or, for free-form values like a custom
+/// resize, whatever caller passes via `displayLabel`).
+struct GrayDropdown: View {
+    @Environment(\.colorScheme) private var scheme
+    @Binding var selection: String
+    let options: [(value: String, label: String)]
+    /// What to render in the closed-state label. Defaults to the matching
+    /// option's label, falling back to the raw selection string.
+    var displayLabel: String? = nil
+    var width: CGFloat = 78
+
+    var body: some View {
+        Menu {
+            ForEach(Array(options.enumerated()), id: \.offset) { _, opt in
+                Button(action: { selection = opt.value }) {
+                    if opt.value == selection {
+                        Label(opt.label, systemImage: "checkmark")
+                    } else {
+                        Text(opt.label)
+                    }
+                }
+            }
+        } label: {
+            HStack(spacing: 6) {
+                Text(displayLabel ?? optionLabel(for: selection) ?? selection)
+                    .font(Typography.systemTiny)
+                    .foregroundColor(Palette.fg(scheme))
+                    .lineLimit(1)
+                Spacer(minLength: 0)
+                Text("▾")
+                    .font(.system(size: 9))
+                    .foregroundColor(Palette.fgMuted(scheme))
+            }
+            .padding(.horizontal, 10)
+            .frame(width: width, height: 24)
+            .background(Palette.bg(scheme))
+            .overlay(Rectangle().strokeBorder(Palette.border(scheme), lineWidth: 1))
+            .contentShape(Rectangle())
+        }
+        .menuStyle(.borderlessButton)
+        .menuIndicator(.hidden)
+        .fixedSize()
+        .cursorPointer()
+    }
+
+    private func optionLabel(for value: String) -> String? {
+        options.first(where: { $0.value == value })?.label
     }
 }
 
