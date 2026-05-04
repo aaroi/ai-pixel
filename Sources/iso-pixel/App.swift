@@ -1,6 +1,6 @@
 import SwiftUI
 
-struct AiPixelApp: App {
+struct IsoPixelApp: App {
     var body: some Scene {
         WindowGroup {
             ContentView()

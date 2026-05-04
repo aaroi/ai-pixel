@@ -2,12 +2,12 @@
 import PackageDescription
 
 let package = Package(
-    name: "ai-pixel",
+    name: "iso-pixel",
     platforms: [.macOS(.v13)],
     targets: [
         .executableTarget(
-            name: "ai-pixel",
-            path: "Sources/ai-pixel"
+            name: "iso-pixel",
+            path: "Sources/iso-pixel"
         )
     ]
 )

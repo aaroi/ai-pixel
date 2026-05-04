@@ -1,11 +1,11 @@
 import Foundation
 
-/// Command-line interface for ai.pixel — same processing engine as the GUI,
+/// Command-line interface for iso.pixel — same processing engine as the GUI,
 /// invoked headlessly. Designed to be called from agents (Claude Code, scripts,
 /// automation) without launching a window.
 ///
 /// Usage:
-///   ai-pixel [options] <file>...
+///   iso-pixel [options] <file>...
 ///
 /// Options:
 ///   --format <jpeg|png|webp>   output format (default: jpeg)
@@ -83,7 +83,7 @@ enum CLI {
         }
 
         if inputs.isEmpty {
-            fputs("error: no input files. use `ai-pixel --help` for usage.\n", stderr)
+            fputs("error: no input files. use `iso-pixel --help` for usage.\n", stderr)
             return 2
         }
 
@@ -198,9 +198,9 @@ enum CLI {
 
     private static func printHelp() {
         print("""
-        ai.pixel — minimalist image compression for macOS
+        iso.pixel — minimalist image compression for macOS
 
-        usage: ai-pixel [options] <file>...
+        usage: iso-pixel [options] <file>...
 
         options:
           --format <jpeg|png|webp>   output format (default: jpeg)
@@ -218,11 +218,11 @@ enum CLI {
           - exit codes: 0 ok, 1 some files failed, 2 bad arguments.
 
         examples:
-          ai-pixel poster.png
-          ai-pixel --max-edge 1080 --format webp --quality 85 *.png
-          ai-pixel --max-edge 0 --quality 80 photo.jpg     # compress, don't resize
-          ai-pixel --suffix -li --output-dir ~/Desktop a.png b.jpg
-          ai-pixel --json one.png two.png
+          iso-pixel poster.png
+          iso-pixel --max-edge 1080 --format webp --quality 85 *.png
+          iso-pixel --max-edge 0 --quality 80 photo.jpg     # compress, don't resize
+          iso-pixel --suffix -li --output-dir ~/Desktop a.png b.jpg
+          iso-pixel --json one.png two.png
         """)
     }
 }

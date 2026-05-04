@@ -1,13 +1,13 @@
 #!/usr/bin/env bash
-# Builds ai.pixel.app from the Swift package + Resources/Info.plist.
+# Builds iso.pixel.app from the Swift package + Resources/Info.plist.
 # Usage: ./build.sh [debug|release]   (default: release)
 
 set -euo pipefail
 
 CONFIG="${1:-release}"
 ROOT="$(cd "$(dirname "$0")" && pwd)"
-APP_NAME="ai.pixel"
-BIN_NAME="ai-pixel"
+APP_NAME="iso.pixel"
+BIN_NAME="iso-pixel"
 APP_DIR="$ROOT/build/$APP_NAME.app"
 
 echo "→ swift build -c $CONFIG"

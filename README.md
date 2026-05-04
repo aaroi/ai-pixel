@@ -1,8 +1,8 @@
 <p align="center">
-  <img src="assets/icon.png" width="160" alt="ai.pixel icon" />
+  <img src="assets/icon.png" width="160" alt="iso.pixel icon" />
 </p>
 
-# ai.pixel
+# iso.pixel
 
 **The minimalistic image compression tool for macOS.**
 
@@ -41,21 +41,21 @@ Built on SwiftUI + ImageIO. The shipped `.app` is around 500 KB.
 ## Command-line interface
 
 The same binary runs headlessly when invoked with file arguments — no window,
-no Dock icon, just compress and exit. This is what makes ai.pixel scriptable
+no Dock icon, just compress and exit. This is what makes iso.pixel scriptable
 from agents (Claude Code, shell scripts, automations).
 
 ```bash
 # Path to the binary inside the .app bundle
-ai-pixel=/Applications/ai.pixel.app/Contents/MacOS/ai-pixel
+iso-pixel=/Applications/iso.pixel.app/Contents/MacOS/iso-pixel
 
-# Optional: drop into your PATH so you can just type `ai-pixel`
-ln -sf "$ai-pixel" /usr/local/bin/ai-pixel
+# Optional: drop into your PATH so you can just type `iso-pixel`
+ln -sf "$iso-pixel" /usr/local/bin/iso-pixel
 
 # Examples
-ai-pixel poster.png                                     # → poster-compressed.jpg
-ai-pixel --format webp --quality 85 *.png               # batch, WebP at q=85
-ai-pixel --suffix -li --output-dir ~/Desktop a.png b.jpg
-ai-pixel --json one.png two.png                         # one JSON object per line
+iso-pixel poster.png                                     # → poster-compressed.jpg
+iso-pixel --format webp --quality 85 *.png               # batch, WebP at q=85
+iso-pixel --suffix -li --output-dir ~/Desktop a.png b.jpg
+iso-pixel --json one.png two.png                         # one JSON object per line
 ```
 
 ### Flags
@@ -103,16 +103,16 @@ bundle from Finder, `open`, or any launcher that doesn't pass file arguments.
 package dependencies.
 
 ```bash
-git clone https://github.com/aaroi/ai-pixel.git
-cd ai-pixel
+git clone https://github.com/aaroi/iso-pixel.git
+cd iso-pixel
 ./build.sh                  # default: release
-open build/ai.pixel.app     # try it
+open build/iso.pixel.app     # try it
 ```
 
 To install:
 
 ```bash
-cp -R build/ai.pixel.app /Applications/
+cp -R build/iso.pixel.app /Applications/
 ```
 
 The build script ad-hoc codesigns the bundle so Gatekeeper won't quarantine it
@@ -122,9 +122,9 @@ a Developer ID Application certificate and notarization — out of scope here.
 ### Project layout
 
 ```
-ai-pixel/
+iso-pixel/
 ├── Package.swift              # SPM executable target, macOS 13+
-├── Sources/ai-pixel/
+├── Sources/iso-pixel/
 │   ├── App.swift              # @main scene + menu commands
 │   ├── ContentView.swift      # main window, drop zone, list, footer
 │   ├── ImageJob.swift         # per-image state machine + ObservableObject
@@ -138,7 +138,7 @@ ai-pixel/
 
 ## Privacy
 
-ai.pixel does not connect to the network. There are no analytics, no crash
+iso.pixel does not connect to the network. There are no analytics, no crash
 reporters, no auto-updaters, no remote feature flags. Your images are read from
 disk, processed in memory, and written back to disk — nothing leaves the
 machine.

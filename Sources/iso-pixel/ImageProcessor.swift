@@ -127,8 +127,8 @@ enum ImageProcessor {
         guard let cwebp = cwebpPath else { throw ProcessingError.webpToolMissing }
 
         let tmpDir = FileManager.default.temporaryDirectory
-        let pngURL  = tmpDir.appendingPathComponent("aipixel-\(UUID().uuidString).png")
-        let webpURL = tmpDir.appendingPathComponent("aipixel-\(UUID().uuidString).webp")
+        let pngURL  = tmpDir.appendingPathComponent("isopixel-\(UUID().uuidString).png")
+        let webpURL = tmpDir.appendingPathComponent("isopixel-\(UUID().uuidString).webp")
         defer {
             try? FileManager.default.removeItem(at: pngURL)
             try? FileManager.default.removeItem(at: webpURL)

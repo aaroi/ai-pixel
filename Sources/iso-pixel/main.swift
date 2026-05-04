@@ -15,4 +15,4 @@ if !userArgs.isEmpty {
     exit(Int32(exitCode))
 }
 
-AiPixelApp.main()
+IsoPixelApp.main()
