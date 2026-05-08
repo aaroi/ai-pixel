@@ -7,6 +7,7 @@ struct ContentView: View {
     @Environment(\.colorScheme) private var scheme
     @StateObject private var jobs = JobsModel()
     @State private var isDropTargeted = false
+    @State private var comparisonJob: ImageJob? = nil
     @AppStorage(SettingsKeys.outputSuffix)  private var suffix: String  = SettingsKeys.defaultSuffix
     @AppStorage(SettingsKeys.outputFormat)  private var formatRaw: String = SettingsKeys.defaultFormat
     @AppStorage(SettingsKeys.outputQuality) private var quality: Double = SettingsKeys.defaultQuality
@@ -21,7 +22,7 @@ struct ContentView: View {
                 // Reserve space for the title-bar / traffic-light zone so the
                 // settings bar below can use the same leading padding (16) as
                 // the rows and footer — everything left-aligns to the same edge.
-                Color.clear.frame(height: 22)
+                Color.clear.frame(height: 28)
                 settingsBar
                 Hairline()
 
@@ -36,6 +37,7 @@ struct ContentView: View {
                     footer
                 }
             }
+            .ignoresSafeArea(.container, edges: .top)
         }
         .onDrop(of: [UTType.fileURL], isTargeted: $isDropTargeted) { providers in
             handleDrop(providers)
@@ -49,6 +51,21 @@ struct ContentView: View {
                     .allowsHitTesting(false)
             }
         }
+        .overlay {
+            if let job = comparisonJob,
+               let before = NSImage(contentsOf: job.sourceURL),
+               let processed = job.outputData,
+               let after = NSImage(data: processed) {
+                ComparisonView(
+                    beforeImage: before,
+                    afterImage: after,
+                    beforeCaption: "before · \(job.sourceWidth)×\(job.sourceHeight) · \(ByteFormat.short(job.sourceBytes))",
+                    afterCaption:  "after · \(comparisonAfterCaption(job))",
+                    onClose: { comparisonJob = nil }
+                )
+                .transition(.opacity)
+            }
+        }
         .onReceive(NotificationCenter.default.publisher(for: .openImagesRequested)) { _ in openPanel() }
         .onReceive(NotificationCenter.default.publisher(for: .saveAllRequested)) { _ in jobs.saveAll() }
         .onChange(of: formatRaw) { _ in jobs.reprocessAll() }
@@ -59,6 +76,12 @@ struct ContentView: View {
 
     private var format: OutputFormat {
         OutputFormat(rawValue: formatRaw) ?? .jpeg
+    }
+
+    private func comparisonAfterCaption(_ job: ImageJob) -> String {
+        guard let dims = job.outputDimensions, let bytes = job.outputBytes else { return "—" }
+        let pct = job.percentSaved.map { " · −\($0)%" } ?? ""
+        return "\(dims.0)×\(dims.1) · \(ByteFormat.short(bytes))\(pct)"
     }
 
     /// Bridge between the dropdown's String selection and the Int-typed
@@ -86,7 +109,7 @@ struct ContentView: View {
             return maxEdge > 0 ? "\(maxEdge) px" : "Custom"
         }
         switch maxEdge {
-        case 0:    return "Off"
+        case 0:    return "Auto"
         case 1080: return "1080 px"
         case 1920: return "1920 px"
         default:   return "\(maxEdge) px"
@@ -107,6 +130,13 @@ struct ContentView: View {
     private var emptyState: some View {
         VStack(spacing: 10) {
             Spacer()
+            if let icon = NSApp.applicationIconImage {
+                Image(nsImage: icon)
+                    .resizable()
+                    .interpolation(.high)
+                    .frame(width: 96, height: 96)
+                    .padding(.bottom, 6)
+            }
             Text("Drop images")
                 .font(Typography.systemLarge)
                 .foregroundColor(Palette.fg(scheme))
@@ -157,7 +187,7 @@ struct ContentView: View {
                     options: [
                         ("1080",   "1080 px"),
                         ("1920",   "1920 px"),
-                        ("0",      "Off"),
+                        ("0",      "Auto"),
                         ("custom", "Custom…")
                     ],
                     displayLabel: maxEdgeDisplayLabel,
@@ -244,7 +274,7 @@ struct ContentView: View {
         ScrollView {
             LazyVStack(spacing: 0) {
                 ForEach(jobs.list) { job in
-                    JobRow(job: job)
+                    JobRow(job: job, onCompare: { comparisonJob = job })
                         .environmentObject(jobs)
                     Hairline()
                 }
@@ -419,6 +449,9 @@ struct JobRow: View {
     @ObservedObject var job: ImageJob
     @EnvironmentObject var jobs: JobsModel
     @Environment(\.colorScheme) private var scheme
+    @State private var isEditingName: Bool = false
+    @FocusState private var nameFocused: Bool
+    var onCompare: () -> Void = {}
 
     var body: some View {
         HStack(alignment: .center, spacing: 16) {
@@ -481,7 +514,7 @@ struct JobRow: View {
                 .foregroundColor(Palette.fg(scheme))
                 .lineLimit(1)
                 .truncationMode(.middle)
-        } else {
+        } else if isEditingName {
             HStack(spacing: 0) {
                 TextField("", text: Binding(
                     get: { job.outputStem },
@@ -495,11 +528,36 @@ struct JobRow: View {
                 .textFieldStyle(.plain)
                 .font(Typography.monoSmall)
                 .foregroundColor(Palette.fg(scheme))
+                .focused($nameFocused)
                 .fixedSize(horizontal: true, vertical: false)
+                // SwiftUI TextField reserves trailing space for the caret;
+                // pull `.jpg` flush against the typed name.
+                .padding(.trailing, -6)
+                .onSubmit { isEditingName = false }
+                .onExitCommand { isEditingName = false }
                 Text(".\(currentExt)")
                     .font(Typography.monoSmall)
                     .foregroundColor(Palette.fgMuted(scheme))
             }
+            .onChange(of: nameFocused) { focused in
+                if !focused { isEditingName = false }
+            }
+        } else {
+            // Read-only display: middle-truncates so long filenames fit. Click
+            // anywhere on the line to switch to the editable TextField.
+            Text("\(job.outputStem).\(currentExt)")
+                .font(Typography.monoSmall)
+                .foregroundColor(Palette.fg(scheme))
+                .lineLimit(1)
+                .truncationMode(.middle)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .contentShape(Rectangle())
+                .onTapGesture {
+                    isEditingName = true
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.02) {
+                        nameFocused = true
+                    }
+                }
         }
     }
 
@@ -510,20 +568,35 @@ struct JobRow: View {
 
     @ViewBuilder
     private func thumbnail(image: NSImage?, dimmed: Bool = false) -> some View {
-        Group {
+        let height: CGFloat = 56
+        let maxWidth: CGFloat = 120
+        let minWidth: CGFloat = 28
+        let width: CGFloat = {
+            if let img = image, img.size.height > 0 {
+                let ideal = height * img.size.width / img.size.height
+                return min(maxWidth, max(minWidth, ideal))
+            }
+            return height
+        }()
+        ZStack {
+            Rectangle().fill(Palette.border(scheme))
             if let nsimg = image {
                 Image(nsImage: nsimg)
                     .resizable()
                     .aspectRatio(contentMode: .fill)
+                    .frame(width: width, height: height)
                     .clipped()
                     .opacity(dimmed ? 0.35 : 1.0)
-            } else {
-                Rectangle().fill(Palette.border(scheme))
             }
         }
-        .frame(width: 56, height: 56)
-        .background(Palette.border(scheme))
+        .frame(width: width, height: height)
         .overlay(Rectangle().strokeBorder(Palette.border(scheme), lineWidth: 1))
+        .contentShape(Rectangle())
+        .onTapGesture {
+            // Only open comparison once the processed bytes exist.
+            if job.outputData != nil { onCompare() }
+        }
+        .cursorPointer()
     }
 
     private var sourceLine: String {

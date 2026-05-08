@@ -113,6 +113,15 @@ final class ImageJob: ObservableObject, Identifiable {
         }
     }
 
+    /// Encoded bytes of the processed image (whatever format it was rendered
+    /// in). Used to construct an NSImage for the comparison overlay.
+    var outputData: Data? {
+        switch state {
+        case .ready(let p), .saved(_, let p): return p.data
+        default: return nil
+        }
+    }
+
     /// Bytes saved vs source. Nil while processing.
     var bytesSaved: Int? {
         guard let out = outputBytes, sourceBytes > 0 else { return nil }
