@@ -1,4 +1,6 @@
 import SwiftUI
+import AppKit
+import UniformTypeIdentifiers
 
 /// 1pt horizontal rule in the palette's border color. Replaces SwiftUI's
 /// `Divider`, which uses the system separator (darker than our gray-200).
@@ -102,6 +104,89 @@ struct GrayDropdown: View {
 
     private func optionLabel(for value: String) -> String? {
         options.first(where: { $0.value == value })?.label
+    }
+}
+
+/// Chrome-style downloads button: opens a dropdown of the most recent image
+/// files in ~/Downloads. Picking one calls `onPick`, which the parent wires to
+/// `jobs.add(url:)` to start compression immediately.
+struct DownloadsMenuButton: View {
+    @Environment(\.colorScheme) private var scheme
+    let onPick: (URL) -> Void
+
+    // Bumped on app re-activation so the menu reflects newly-downloaded files
+    // without needing the user to interact with anything else first.
+    @State private var version = 0
+
+    var body: some View {
+        Menu {
+            let items = Self.recentDownloadImages()
+            if items.isEmpty {
+                Text("No recent images in Downloads")
+            } else {
+                ForEach(items, id: \.self) { url in
+                    Button(action: { onPick(url) }) {
+                        Text(url.lastPathComponent)
+                    }
+                }
+                Divider()
+                Button("Open Downloads…") {
+                    if let dir = Self.downloadsURL() {
+                        NSWorkspace.shared.open(dir)
+                    }
+                }
+            }
+        } label: {
+            Image(systemName: "arrow.down.to.line")
+                .font(.system(size: 11, weight: .medium))
+                .foregroundColor(Palette.fg(scheme))
+                .frame(width: 28, height: 24)
+                .background(Palette.bg(scheme))
+                .overlay(Rectangle().strokeBorder(Palette.border(scheme), lineWidth: 1))
+                .contentShape(Rectangle())
+        }
+        .menuStyle(.borderlessButton)
+        .menuIndicator(.hidden)
+        .fixedSize()
+        .cursorPointer()
+        .help("Recent downloads")
+        .id(version)
+        .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
+            version &+= 1
+        }
+    }
+
+    static func downloadsURL() -> URL? {
+        try? FileManager.default.url(
+            for: .downloadsDirectory,
+            in: .userDomainMask,
+            appropriateFor: nil,
+            create: false
+        )
+    }
+
+    /// Most-recently-modified image files in ~/Downloads, newest first.
+    /// Walks only the top level — recursing into subfolders would surprise users
+    /// who keep large archives in there.
+    static func recentDownloadImages(limit: Int = 10) -> [URL] {
+        guard let dir = downloadsURL() else { return [] }
+        let keys: [URLResourceKey] = [.contentTypeKey, .contentModificationDateKey, .isRegularFileKey]
+        guard let contents = try? FileManager.default.contentsOfDirectory(
+            at: dir,
+            includingPropertiesForKeys: keys,
+            options: [.skipsHiddenFiles, .skipsSubdirectoryDescendants]
+        ) else { return [] }
+
+        let images: [(URL, Date)] = contents.compactMap { url in
+            let v = try? url.resourceValues(forKeys: Set(keys))
+            guard v?.isRegularFile == true,
+                  v?.contentType?.conforms(to: .image) == true else { return nil }
+            return (url, v?.contentModificationDate ?? .distantPast)
+        }
+        return images
+            .sorted { $0.1 > $1.1 }
+            .prefix(limit)
+            .map { $0.0 }
     }
 }
 

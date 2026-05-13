@@ -20,9 +20,11 @@ enum CLI {
 
     static func run(args: [String]) -> Int {
         var format: OutputFormat = .jpeg
+        var formatExplicit = false
         var quality: Double = 0.95
         var suffix: String = "-compressed"
         var maxEdge: Int = SettingsKeys.defaultMaxEdge
+        var fps: Int = SettingsKeys.defaultGifFPS
         var outputDir: URL? = nil
         var emitJSON = false
         var inputs: [URL] = []
@@ -36,11 +38,12 @@ enum CLI {
                 return 0
             case "--format":
                 i += 1
-                guard i < args.count, let f = OutputFormat(rawValue: args[i].lowercased()) else {
-                    fputs("error: --format requires jpeg|png|webp\n", stderr)
+                guard i < args.count, let f = OutputFormat(rawValue: args[i].lowercased()), !f.isVideoOutput else {
+                    fputs("error: --format requires jpeg|png|webp (video inputs always produce gif)\n", stderr)
                     return 2
                 }
                 format = f
+                formatExplicit = true
             case "--quality":
                 i += 1
                 guard i < args.count, let q = Double(args[i]) else {
@@ -63,6 +66,13 @@ enum CLI {
                     return 2
                 }
                 maxEdge = n
+            case "--fps":
+                i += 1
+                guard i < args.count, let n = Int(args[i]), n > 0 else {
+                    fputs("error: --fps requires a positive integer\n", stderr)
+                    return 2
+                }
+                fps = n
             case "--output-dir":
                 i += 1
                 guard i < args.count else {
@@ -93,8 +103,10 @@ enum CLI {
             let summary = compressOne(
                 input: input,
                 format: format,
+                formatExplicit: formatExplicit,
                 quality: quality,
                 maxEdge: maxEdge,
+                fps: fps,
                 suffix: suffix,
                 outputDir: outputDir
             )
@@ -110,31 +122,52 @@ enum CLI {
     private static func compressOne(
         input: URL,
         format: OutputFormat,
+        formatExplicit: Bool,
         quality: Double,
         maxEdge: Int,
+        fps: Int,
         suffix: String,
         outputDir: URL?
     ) -> Summary {
         let sourceBytes = (try? FileManager.default.attributesOfItem(atPath: input.path)[.size] as? Int) ?? 0
         let dir = outputDir ?? input.deletingLastPathComponent()
         let stem = input.deletingPathExtension().lastPathComponent
-        let dest = dir.appendingPathComponent("\(stem)\(suffix).\(format.fileExtension)")
+        // Video inputs always produce GIF, overriding --format for that file.
+        let isVideo = VideoProcessor.isVideo(url: input)
+        let effectiveFormat: OutputFormat = isVideo ? .gif : format
+        if isVideo && formatExplicit && format != .gif {
+            fputs("warning: --format \(format.rawValue) ignored for video input \(input.lastPathComponent) (always gif)\n", stderr)
+        }
+        let dest = dir.appendingPathComponent("\(stem)\(suffix).\(effectiveFormat.fileExtension)")
 
         guard FileManager.default.fileExists(atPath: input.path) else {
             return Summary(input: input, output: dest, ok: false, error: "file not found", sourceBytes: sourceBytes, outputBytes: 0)
         }
 
         do {
-            let processed = try ImageProcessor.process(url: input, format: format, quality: quality, maxEdge: maxEdge)
+            let data: Data
+            if isVideo {
+                let processed = try VideoProcessor.process(
+                    url: input,
+                    quality: quality,
+                    maxEdge: maxEdge,
+                    fps: fps,
+                    progress: nil
+                )
+                data = processed.data
+            } else {
+                let processed = try ImageProcessor.process(url: input, format: format, quality: quality, maxEdge: maxEdge)
+                data = processed.data
+            }
             try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-            try processed.data.write(to: dest, options: .atomic)
+            try data.write(to: dest, options: .atomic)
             return Summary(
                 input: input,
                 output: dest,
                 ok: true,
                 error: nil,
                 sourceBytes: sourceBytes,
-                outputBytes: processed.data.count
+                outputBytes: data.count
             )
         } catch {
             return Summary(
@@ -198,15 +231,16 @@ enum CLI {
 
     private static func printHelp() {
         print("""
-        iso.pixel — minimalist image compression for macOS
+        iso.pixel — minimalist image & video compression for macOS
 
         usage: iso-pixel [options] <file>...
 
         options:
-          --format <jpeg|png|webp>   output format (default: jpeg)
+          --format <jpeg|png|webp>   output format for images (default: jpeg)
           --quality <0-100|0-1>      quality for lossy formats (default: 95)
           --max-edge <px>            resize so the long edge is this many px;
                                      0 = don't resize (default: 1920)
+          --fps <n>                  frames per second for video → gif (default: 12)
           --suffix <str>             filename suffix (default: -compressed)
           --output-dir <path>        write outputs here (default: alongside source)
           --json                     emit results as JSON lines (one per file)
@@ -214,13 +248,15 @@ enum CLI {
 
         notes:
           - aspect ratio is preserved when resizing.
-          - webp requires `brew install webp` (macOS doesn't ship a webp encoder).
+          - video inputs (.mp4, .mov, …) always produce gif; --format is ignored.
+          - webp requires `brew install webp`; gif requires `brew install ffmpeg`.
           - exit codes: 0 ok, 1 some files failed, 2 bad arguments.
 
         examples:
           iso-pixel poster.png
           iso-pixel --max-edge 1080 --format webp --quality 85 *.png
           iso-pixel --max-edge 0 --quality 80 photo.jpg     # compress, don't resize
+          iso-pixel --fps 15 --max-edge 480 demo.mp4         # video → gif
           iso-pixel --suffix -li --output-dir ~/Desktop a.png b.jpg
           iso-pixel --json one.png two.png
         """)

@@ -17,6 +17,8 @@ enum ProcessingError: Error, LocalizedError {
     case decodeFailed
     case encodeFailed(format: OutputFormat)
     case webpToolMissing
+    case ffmpegToolMissing
+    case ffmpegFailed(message: String)
 
     var errorDescription: String? {
         switch self {
@@ -24,6 +26,8 @@ enum ProcessingError: Error, LocalizedError {
         case .decodeFailed: return "couldn't decode"
         case .encodeFailed(let fmt): return "couldn't encode \(fmt.label)"
         case .webpToolMissing: return "webp requires `brew install webp`"
+        case .ffmpegToolMissing: return "gif requires `brew install ffmpeg`"
+        case .ffmpegFailed(let msg): return "ffmpeg: \(msg)"
         }
     }
 }

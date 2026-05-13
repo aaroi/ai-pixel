@@ -12,6 +12,9 @@ final class ImageJob: ObservableObject, Identifiable {
     let sourceWidth: Int
     let sourceHeight: Int
     let sourceThumbnail: NSImage?
+    /// True when the source is a video — routes processing through ffmpeg and
+    /// forces GIF output.
+    let isVideo: Bool
 
     /// Editable filename stem (without extension). Initialized from the global
     /// suffix at import time; the user can rewrite it per-row before saving.
@@ -33,12 +36,26 @@ final class ImageJob: ObservableObject, Identifiable {
     }
 
     @Published var state: State = .processing
+    /// 0..1 progress for long video encodes. Nil for image jobs.
+    @Published var processingProgress: Double? = nil
 
     init?(sourceURL: URL) {
         let attrs = (try? FileManager.default.attributesOfItem(atPath: sourceURL.path)) ?? [:]
         let bytes = (attrs[.size] as? NSNumber)?.intValue ?? 0
-        guard let dims = ImageProcessor.sourceDimensions(url: sourceURL) else {
-            return nil
+        let isVideo = VideoProcessor.isVideo(url: sourceURL)
+        let width: Int
+        let height: Int
+        let thumb: NSImage?
+        if isVideo {
+            guard let meta = VideoProcessor.sourceMetadata(url: sourceURL) else { return nil }
+            width = meta.width
+            height = meta.height
+            thumb = VideoProcessor.sourceThumbnail(url: sourceURL)
+        } else {
+            guard let dims = ImageProcessor.sourceDimensions(url: sourceURL) else { return nil }
+            width = dims.0
+            height = dims.1
+            thumb = ImageProcessor.sourceThumbnail(url: sourceURL)
         }
         let stem = sourceURL.deletingPathExtension().lastPathComponent
         let suffix = UserDefaults.standard.outputSuffix
@@ -46,9 +63,10 @@ final class ImageJob: ObservableObject, Identifiable {
         self.sourceName = sourceURL.lastPathComponent
         self.sourceStem = stem
         self.sourceBytes = bytes
-        self.sourceWidth = dims.0
-        self.sourceHeight = dims.1
-        self.sourceThumbnail = ImageProcessor.sourceThumbnail(url: sourceURL)
+        self.sourceWidth = width
+        self.sourceHeight = height
+        self.sourceThumbnail = thumb
+        self.isVideo = isVideo
         // If the source filename already ends with the current global suffix
         // (re-import of a previously saved output), treat the suffix as already
         // applied so we don't stack it.
@@ -62,9 +80,12 @@ final class ImageJob: ObservableObject, Identifiable {
 
     func run() async {
         let url = sourceURL
-        let format = UserDefaults.standard.outputFormat
         let quality = UserDefaults.standard.outputQuality
         let maxEdge = UserDefaults.standard.outputMaxEdge
+        let isVideo = self.isVideo
+        // Video inputs always produce GIF regardless of the global format picker.
+        let format: OutputFormat = isVideo ? .gif : UserDefaults.standard.outputFormat
+        let fps = UserDefaults.standard.outputGifFPS
         // First run shows a spinner. Re-runs (triggered by quality / format
         // changes) keep the current ready/saved data visible so the row
         // doesn't flash a spinner on every slider tick.
@@ -75,13 +96,33 @@ final class ImageJob: ObservableObject, Identifiable {
             }
         }()
         if isFirstRun { self.state = .processing }
+        self.processingProgress = isVideo ? 0 : nil
         do {
-            let processed = try await Task.detached(priority: .userInitiated) {
-                try ImageProcessor.process(url: url, format: format, quality: quality, maxEdge: maxEdge)
-            }.value
+            let processed: ProcessedImage
+            if isVideo {
+                processed = try await Task.detached(priority: .userInitiated) {
+                    try VideoProcessor.process(
+                        url: url,
+                        quality: quality,
+                        maxEdge: maxEdge,
+                        fps: fps,
+                        progress: { value in
+                            Task { @MainActor [weak self] in
+                                self?.processingProgress = value
+                            }
+                        }
+                    )
+                }.value
+            } else {
+                processed = try await Task.detached(priority: .userInitiated) {
+                    try ImageProcessor.process(url: url, format: format, quality: quality, maxEdge: maxEdge)
+                }.value
+            }
             self.state = .ready(processed: processed)
+            self.processingProgress = nil
         } catch {
             self.state = .failed(message: error.localizedDescription)
+            self.processingProgress = nil
         }
     }
 
@@ -104,6 +145,28 @@ final class ImageJob: ObservableObject, Identifiable {
         } catch {
             self.state = .failed(message: "save failed: \(error.localizedDescription)")
         }
+    }
+
+    /// Write the processed bytes to the general pasteboard. Always writes a
+    /// TIFF fallback alongside the native-format bytes — most editors / chat
+    /// apps only sniff for `public.tiff` or `public.png` on paste, and WebP in
+    /// particular gets ignored without it.
+    @discardableResult
+    func copyToPasteboard() -> Bool {
+        let processed: ProcessedImage
+        switch state {
+        case .ready(let p), .saved(_, let p): processed = p
+        default: return false
+        }
+        let pb = NSPasteboard.general
+        pb.clearContents()
+        let item = NSPasteboardItem()
+        let nativeType = NSPasteboard.PasteboardType(processed.format.typeIdentifier as String)
+        item.setData(processed.data, forType: nativeType)
+        if let tiff = processed.thumbnail.tiffRepresentation {
+            item.setData(tiff, forType: .tiff)
+        }
+        return pb.writeObjects([item])
     }
 
     var outputBytes: Int? {

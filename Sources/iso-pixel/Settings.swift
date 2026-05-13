@@ -10,6 +10,7 @@ enum SettingsKeys {
     static let outputQuality = "outputQuality"
     static let outputMaxEdge     = "outputMaxEdge"
     static let outputMaxEdgeMode = "outputMaxEdgeMode"
+    static let outputGifFPS  = "outputGifFPS"
 
     static let defaultSuffix:  String = "-compressed"
     static let defaultFormat:  String = OutputFormat.jpeg.rawValue
@@ -18,12 +19,15 @@ enum SettingsKeys {
     static let defaultMaxEdge: Int    = 1920
     /// "preset" or "custom". Custom mode shows the numeric input.
     static let defaultMaxEdgeMode: String = "preset"
+    /// Frames per second for video → GIF conversions.
+    static let defaultGifFPS: Int = 12
 }
 
 enum OutputFormat: String, CaseIterable, Identifiable {
     case jpeg
     case png
     case webp
+    case gif
 
     var id: String { rawValue }
 
@@ -32,6 +36,7 @@ enum OutputFormat: String, CaseIterable, Identifiable {
         case .jpeg: return "JPEG"
         case .png:  return "PNG"
         case .webp: return "WebP"
+        case .gif:  return "GIF"
         }
     }
 
@@ -40,6 +45,7 @@ enum OutputFormat: String, CaseIterable, Identifiable {
         case .jpeg: return "jpg"
         case .png:  return "png"
         case .webp: return "webp"
+        case .gif:  return "gif"
         }
     }
 
@@ -48,6 +54,7 @@ enum OutputFormat: String, CaseIterable, Identifiable {
         case .jpeg: return UTType.jpeg.identifier as CFString
         case .png:  return UTType.png.identifier as CFString
         case .webp: return "org.webmproject.webp" as CFString
+        case .gif:  return UTType.gif.identifier as CFString
         }
     }
 
@@ -59,10 +66,13 @@ enum OutputFormat: String, CaseIterable, Identifiable {
         return supported.contains(typeIdentifier as String)
     }
 
-    /// All formats are exposed in the picker. Encoding may still fail at the
-    /// system level (e.g. WebP without `cwebp` installed) — that's surfaced
-    /// per-image with a clear error.
-    static var available: [OutputFormat] { allCases }
+    /// GIF is video-output only. It's force-applied to video inputs and never
+    /// offered for still images.
+    var isVideoOutput: Bool { self == .gif }
+
+    /// Formats exposed in the picker. GIF is excluded — it's only produced
+    /// from video inputs, which set the format internally.
+    static var available: [OutputFormat] { allCases.filter { !$0.isVideoOutput } }
 }
 
 extension UserDefaults {
@@ -90,5 +100,13 @@ extension UserDefaults {
             return SettingsKeys.defaultMaxEdge
         }
         return integer(forKey: SettingsKeys.outputMaxEdge)
+    }
+
+    /// Frames per second for video → GIF conversions.
+    var outputGifFPS: Int {
+        if object(forKey: SettingsKeys.outputGifFPS) == nil {
+            return SettingsKeys.defaultGifFPS
+        }
+        return integer(forKey: SettingsKeys.outputGifFPS)
     }
 }

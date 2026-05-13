@@ -3,27 +3,26 @@ import SwiftUI
 // Grayscale palette lifted in spirit from ai.md.
 // Light and dark variants resolve via @Environment(\.colorScheme).
 
-/// Palette mapped onto Tailwind CSS's `gray-*` scale (the cool-tinted one,
-/// not `neutral-*`). Hex values pulled directly from Tailwind v3 defaults so
-/// these tokens render the same as a `bg-gray-900 text-gray-300` page would
-/// in a Tailwind site. Success uses `emerald-*`.
+/// Palette mapped onto Tailwind CSS's `zinc-*` scale — near-neutral with only
+/// a faint cool cast, chosen over `gray-*` so dark mode doesn't read as blue.
+/// Hex values pulled directly from Tailwind v3 defaults. Success uses `emerald-*`.
 ///
 /// Reference: https://tailwindcss.com/docs/customizing-colors
 enum Palette {
-    // MARK: Tailwind gray-* hex values
+    // MARK: Tailwind zinc-* hex values
 
     private enum Gray {
-        static let _50:  UInt32 = 0xF9FAFB
-        static let _100: UInt32 = 0xF3F4F6
-        static let _200: UInt32 = 0xE5E7EB
-        static let _300: UInt32 = 0xD1D5DB
-        static let _400: UInt32 = 0x9CA3AF
-        static let _500: UInt32 = 0x6B7280
-        static let _600: UInt32 = 0x4B5563
-        static let _700: UInt32 = 0x374151
-        static let _800: UInt32 = 0x1F2937
-        static let _900: UInt32 = 0x111827
-        static let _950: UInt32 = 0x030712
+        static let _50:  UInt32 = 0xFAFAFA
+        static let _100: UInt32 = 0xF4F4F5
+        static let _200: UInt32 = 0xE4E4E7
+        static let _300: UInt32 = 0xD4D4D8
+        static let _400: UInt32 = 0xA1A1AA
+        static let _500: UInt32 = 0x71717A
+        static let _600: UInt32 = 0x52525B
+        static let _700: UInt32 = 0x3F3F46
+        static let _800: UInt32 = 0x27272A
+        static let _900: UInt32 = 0x18181B
+        static let _950: UInt32 = 0x09090B
     }
 
     private enum Emerald {

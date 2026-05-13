@@ -13,6 +13,7 @@ struct ContentView: View {
     @AppStorage(SettingsKeys.outputQuality) private var quality: Double = SettingsKeys.defaultQuality
     @AppStorage(SettingsKeys.outputMaxEdge)     private var maxEdge: Int        = SettingsKeys.defaultMaxEdge
     @AppStorage(SettingsKeys.outputMaxEdgeMode) private var maxEdgeMode: String = SettingsKeys.defaultMaxEdgeMode
+    @AppStorage(SettingsKeys.outputGifFPS)      private var gifFPS: Int         = SettingsKeys.defaultGifFPS
 
     var body: some View {
         ZStack(alignment: .top) {
@@ -137,7 +138,7 @@ struct ContentView: View {
                     .frame(width: 96, height: 96)
                     .padding(.bottom, 6)
             }
-            Text("Drop images")
+            Text("Drop images or videos")
                 .font(Typography.systemLarge)
                 .foregroundColor(Palette.fg(scheme))
             (Text("or ").font(Typography.systemTiny)
@@ -210,6 +211,29 @@ struct ContentView: View {
                 }
             }
 
+            // FPS — only relevant for video → GIF, so hidden until a video is loaded.
+            if jobs.hasVideoJobs {
+                HStack(spacing: 6) {
+                    Text("fps")
+                        .font(Typography.systemTiny)
+                        .foregroundColor(Palette.fgMuted(scheme))
+                        .fixedSize()
+                    GrayDropdown(
+                        selection: Binding(
+                            get: { String(gifFPS) },
+                            set: { gifFPS = Int($0) ?? SettingsKeys.defaultGifFPS }
+                        ),
+                        options: [
+                            ("12", "12"),
+                            ("15", "15"),
+                            ("24", "24"),
+                            ("30", "30")
+                        ],
+                        width: 60
+                    )
+                }
+            }
+
             // Quality (lossy only)
             if format.isLossy {
                 HStack(spacing: 8) {
@@ -217,7 +241,7 @@ struct ContentView: View {
                         .font(Typography.systemTiny)
                         .foregroundColor(Palette.fgMuted(scheme))
                         .fixedSize()
-                    GraySlider(value: $quality, range: 0.50...1.00)
+                    GraySlider(value: $quality, range: 0.10...1.00)
                         .frame(width: 130)
                     Text("\(Int((quality * 100).rounded()))%")
                         .font(Typography.monoSmall)
@@ -229,6 +253,8 @@ struct ContentView: View {
             }
 
             Spacer(minLength: 16)
+
+            DownloadsMenuButton(onPick: { url in jobs.add(url: url) })
 
             if !jobs.list.isEmpty {
                 Button(action: { jobs.clear() }) {
@@ -315,11 +341,12 @@ struct ContentView: View {
             provider.loadDataRepresentation(forTypeIdentifier: UTType.fileURL.identifier) { data, _ in
                 guard let data = data,
                       let url = URL(dataRepresentation: data, relativeTo: nil) else { return }
-                // Reject anything that isn't a still image. ImageProcessor would
-                // fail on these too, but bouncing them at the boundary keeps the
-                // list clean.
+                // Accept still images and video files. Anything else gets dropped
+                // at the boundary to keep the list clean.
                 if let type = try? url.resourceValues(forKeys: [.contentTypeKey]).contentType,
-                   !type.conforms(to: .image) {
+                   !type.conforms(to: .image),
+                   !type.conforms(to: .movie),
+                   !type.conforms(to: .audiovisualContent) {
                     return
                 }
                 Task { @MainActor in jobs.add(url: url) }
@@ -329,7 +356,7 @@ struct ContentView: View {
 
     private func openPanel() {
         let panel = NSOpenPanel()
-        panel.allowedContentTypes = [.image]
+        panel.allowedContentTypes = [.image, .movie]
         panel.allowsMultipleSelection = true
         panel.canChooseDirectories = false
         if panel.runModal() == .OK {
@@ -362,13 +389,17 @@ final class JobsModel: ObservableObject {
         cancellables.removeAll()
     }
 
-    /// Re-run processing on every job, including saved ones (saved jobs go back
-    /// to .ready so the user can re-export with the new format / quality).
+    /// Re-run processing on every image job, including saved ones (saved jobs go
+    /// back to .ready so the user can re-export with the new format / quality).
+    /// Video jobs are skipped — ffmpeg runs are slow and a slider drag would
+    /// queue many subprocesses. Re-add a video to apply new settings.
     func reprocessAll() {
-        for job in list {
+        for job in list where !job.isVideo {
             Task { await job.run() }
         }
     }
+
+    var hasVideoJobs: Bool { list.contains(where: \.isVideo) }
 
     /// Apply the current global suffix to every job whose filename hasn't been
     /// manually edited. The previously-applied suffix is stripped from the end
@@ -450,6 +481,7 @@ struct JobRow: View {
     @EnvironmentObject var jobs: JobsModel
     @Environment(\.colorScheme) private var scheme
     @State private var isEditingName: Bool = false
+    @State private var copied: Bool = false
     @FocusState private var nameFocused: Bool
     var onCompare: () -> Void = {}
 
@@ -465,7 +497,7 @@ struct JobRow: View {
             outputColumn
                 .frame(maxWidth: .infinity, alignment: .leading)
 
-            actionButton
+            actionArea
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 10)
@@ -563,6 +595,7 @@ struct JobRow: View {
 
     private var currentExt: String {
         if case .ready(let p) = job.state { return p.format.fileExtension }
+        if job.isVideo { return OutputFormat.gif.fileExtension }
         return UserDefaults.standard.outputFormat.fileExtension
     }
 
@@ -605,8 +638,14 @@ struct JobRow: View {
     }
 
     private var outputLine: String {
+        // Re-encodes keep the previous .ready/.saved state until they complete,
+        // so check the progress flag first to show the live percentage.
+        if job.isVideo, let p = job.processingProgress {
+            return "encoding… \(Int((p * 100).rounded()))%"
+        }
         switch job.state {
         case .processing:
+            if job.isVideo { return "encoding…" }
             return "resizing…"
         case .ready(let p):
             let q = p.format.isLossy ? " q=\(Int((UserDefaults.standard.outputQuality * 100).rounded()))" : ""
@@ -626,39 +665,100 @@ struct JobRow: View {
         }
     }
 
-    private var actionButton: some View {
-        // Fixed slot width so Save / Reveal / spinner / empty all sit in the
-        // same horizontal space — switching between states never reflows the row.
-        Group {
-            switch job.state {
-            case .ready:
-                Button(action: { job.save() }) {
-                    Text("Save")
-                        .font(Typography.systemSmall)
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 6)
-                        .overlay(Rectangle().strokeBorder(Palette.border(scheme), lineWidth: 1))
-                        .foregroundColor(Palette.fg(scheme))
-                }
-                .buttonStyle(.plain)
-                .cursorPointer()
-            case .saved(let url, _):
-                Button(action: { NSWorkspace.shared.activateFileViewerSelecting([url]) }) {
-                    Text("Reveal")
-                        .font(Typography.systemSmall)
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 6)
-                        .overlay(Rectangle().strokeBorder(Palette.border(scheme), lineWidth: 1))
-                        .foregroundColor(Palette.fgMuted(scheme))
-                }
-                .buttonStyle(.plain)
-                .cursorPointer()
-            case .processing:
-                ProgressView().controlSize(.small).scaleEffect(0.7)
-            case .failed:
-                Color.clear
+    /// Copy + Save / Reveal sit in a fixed-width slot so state transitions don't
+    /// reflow the row. Copy is hidden while processing or on failure since
+    /// there's no encoded output to put on the pasteboard. Video rows get an
+    /// extra re-encode button so the user can apply changed settings without
+    /// re-dragging the file.
+    private var actionArea: some View {
+        HStack(spacing: 6) {
+            copyButton
+            if job.isVideo {
+                reencodeButton
             }
+            primaryActionButton
         }
-        .frame(width: 90, alignment: .trailing)
+        .frame(width: job.isVideo ? 170 : 132, alignment: .trailing)
+    }
+
+    @ViewBuilder
+    private var reencodeButton: some View {
+        switch job.state {
+        case .ready, .saved, .failed:
+            Button(action: { Task { await job.run() } }) {
+                Image(systemName: "arrow.clockwise")
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundColor(Palette.fg(scheme))
+                    .frame(width: 32, height: 28)
+                    .overlay(Rectangle().strokeBorder(Palette.border(scheme), lineWidth: 1))
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .cursorPointer()
+            .help("Re-encode with current settings")
+        case .processing:
+            Color.clear.frame(width: 32, height: 28)
+        }
+    }
+
+    @ViewBuilder
+    private var copyButton: some View {
+        switch job.state {
+        case .ready, .saved:
+            Button(action: doCopy) {
+                Image(systemName: copied ? "checkmark" : "doc.on.doc")
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundColor(Palette.fg(scheme))
+                    .frame(width: 32, height: 28)
+                    .overlay(Rectangle().strokeBorder(Palette.border(scheme), lineWidth: 1))
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .cursorPointer()
+            .help("Copy compressed image")
+        case .processing, .failed:
+            // Reserve the slot so the primary button doesn't jump leftward.
+            Color.clear.frame(width: 32, height: 28)
+        }
+    }
+
+    @ViewBuilder
+    private var primaryActionButton: some View {
+        switch job.state {
+        case .ready:
+            Button(action: { job.save() }) {
+                Text("Save")
+                    .font(Typography.systemSmall)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 6)
+                    .overlay(Rectangle().strokeBorder(Palette.border(scheme), lineWidth: 1))
+                    .foregroundColor(Palette.fg(scheme))
+            }
+            .buttonStyle(.plain)
+            .cursorPointer()
+        case .saved(let url, _):
+            Button(action: { NSWorkspace.shared.activateFileViewerSelecting([url]) }) {
+                Text("Reveal")
+                    .font(Typography.systemSmall)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 6)
+                    .overlay(Rectangle().strokeBorder(Palette.border(scheme), lineWidth: 1))
+                    .foregroundColor(Palette.fgMuted(scheme))
+            }
+            .buttonStyle(.plain)
+            .cursorPointer()
+        case .processing:
+            ProgressView().controlSize(.small).scaleEffect(0.7)
+        case .failed:
+            Color.clear
+        }
+    }
+
+    private func doCopy() {
+        guard job.copyToPasteboard() else { return }
+        withAnimation(.easeInOut(duration: 0.12)) { copied = true }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
+            withAnimation(.easeInOut(duration: 0.18)) { copied = false }
+        }
     }
 }
